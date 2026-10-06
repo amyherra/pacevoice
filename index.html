@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PaceVoice — Accessible Voice Assistant Prototype</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --card:#fff; --ink:#172033; --muted:#657089;
+    --accent:#315bea; --accent2:#e9edff; --good:#19734a; --line:#dce2ee;
+    --danger:#b54747; --shadow:0 12px 35px rgba(20,35,70,.10);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+  .wrap{max-width:1100px;margin:auto;padding:28px}
+  header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:20px}
+  h1{font-size:32px;margin:0 0 5px}.sub{color:var(--muted);max-width:720px;line-height:1.5}
+  .badge{background:var(--accent2);color:#2747b9;border-radius:999px;padding:8px 12px;font-weight:700;font-size:13px}
+  .grid{display:grid;grid-template-columns:1.6fr .9fr;gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+  .main{padding:20px}.side{padding:18px}
+  .conversation{height:390px;overflow:auto;border:1px solid var(--line);border-radius:14px;padding:15px;background:#fafbfe}
+  .msg{margin:10px 0;display:flex}.msg.user{justify-content:flex-end}
+  .bubble{max-width:78%;padding:12px 15px;border-radius:15px;line-height:1.45}
+  .assistant .bubble{background:#eef2f8}.user .bubble{background:var(--accent);color:white}
+  .meta{font-size:11px;color:var(--muted);margin:0 4px 4px}
+  .inputrow{display:grid;grid-template-columns:1fr auto auto;gap:8px;margin-top:13px}
+  input{width:100%;padding:13px;border:1px solid #cbd3e3;border-radius:12px;font-size:15px}
+  button{border:0;border-radius:12px;padding:12px 15px;font-weight:700;cursor:pointer}
+  button.primary{background:var(--accent);color:#fff} button.secondary{background:#edf1f8;color:#27324a}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .mic{width:100%;margin-top:9px;background:#172033;color:#fff}
+  .mic.listening{background:#b54747}
+  .status{margin-top:9px;padding:10px 12px;border-radius:10px;background:#f0f4fa;color:#526078;font-size:13px}
+  .section{border-top:1px solid var(--line);padding-top:17px;margin-top:17px}
+  label{display:flex;justify-content:space-between;font-weight:700;font-size:14px;margin:12px 0 7px}
+  input[type=range]{padding:0}
+  .value{color:var(--accent)}
+  .check{display:flex;gap:9px;align-items:flex-start;margin:13px 0;color:#38445b;line-height:1.35}
+  .check input{width:auto;margin-top:3px}
+  .preset{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .preset button{text-align:left}
+  .note{font-size:12px;color:var(--muted);line-height:1.45}
+  .history{margin-top:18px;border-top:1px solid var(--line);padding-top:17px}
+  .history-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+  .history-list{display:flex;gap:8px;overflow-x:auto;padding-bottom:5px}
+  .history-item{min-width:180px;text-align:left;background:#f3f5fa;border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:12px}
+  .history-item:hover{background:#e9edff}
+  .history-item small{display:block;color:var(--muted);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .heard{background:#fff8e6!important;border:1px solid #f0d78a!important;color:#4d3b0a!important}
+  .heard-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:#8a6500;margin-bottom:4px}
+  .toast{position:fixed;right:20px;bottom:20px;background:#172033;color:white;padding:12px 15px;border-radius:12px;display:none}
+  .progress{height:7px;background:#e8ecf4;border-radius:10px;overflow:hidden;margin-top:9px}
+  .bar{height:100%;width:100%;background:var(--accent);transition:width .2s linear}
+  @media(max-width:800px){.grid{grid-template-columns:1fr}.inputrow{grid-template-columns:1fr 1fr}.inputrow input{grid-column:1/-1}header{display:block}.badge{display:inline-block;margin-top:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>PaceVoice</h1>
+    <div class="sub">A prototype for a more patient, multimodal voice assistant. It lets the user control how quickly the assistant listens, repeats information, and keeps a visible conversation record.</div>
+  </div>
+  <div class="badge">Accessibility prototype • v0.1</div>
+</header>
+
+<div class="grid">
+  <main class="card main">
+    <div id="conversation" class="conversation" aria-live="polite"></div>
+
+    <div class="history">
+      <div class="history-header">
+        <b>Previous Conversations</b>
+        <button class="secondary" onclick="newConversation()">＋ New conversation</button>
+      </div>
+      <div id="historyList" class="history-list"></div>
+      <div class="note" style="margin-top:8px">
+        Your conversations stay readable here so you can review what was said without having to remember or repeat the interaction.
+      </div>
+    </div>
+
+    <div class="inputrow">
+      <input id="textInput" aria-label="Type a command" placeholder="Type a command (or use the microphone)..." />
+      <button class="primary" onclick="sendText()">Send</button>
+      <button class="secondary" onclick="repeatLast()">Repeat</button>
+    </div>
+    <button id="mic" class="mic" onclick="toggleMic()">🎙 Start voice input</button>
+    <div id="status" class="status">Ready. You can speak, type, or use the quick examples below.</div>
+    <div class="progress"><div id="bar" class="bar"></div></div>
+
+    <div class="section">
+      <b>Try an interaction</b>
+      <div class="preset" style="margin-top:10px">
+        <button class="secondary" onclick="demo('Set a reminder to take my medication at 8 PM')">Set a reminder</button>
+        <button class="secondary" onclick="demo('What is on my calendar tomorrow?')">Check calendar</button>
+        <button class="secondary" onclick="demo('Turn on the kitchen lights')">Turn on lights</button>
+        <button class="secondary" onclick="demo('Tell me the weather')">Ask weather</button>
+      </div>
+    </div>
+  </main>
+
+  <aside class="card side">
+    <h2 style="margin-top:0">My Pace Settings</h2>
+    <p class="note">These controls are part of the proposed solution: the user—not the assistant—sets the interaction pace.</p>
+
+    <div class="section" style="border-top:0;padding-top:0;margin-top:0">
+      <label for="timeout">Response time <span class="value" id="timeoutVal">12 sec</span></label>
+      <input id="timeout" type="range" min="5" max="30" value="12" oninput="updateSettings()">
+
+      <label for="repeat">Repeat interval <span class="value" id="repeatVal">1 time</span></label>
+      <input id="repeat" type="range" min="0" max="3" value="1" oninput="updateSettings()">
+
+      <label class="check"><input id="showInput" type="checkbox" checked onchange="updateSettings()"> Always show what PaceVoice thinks I said.</label>
+      <label class="check"><input id="confirm" type="checkbox" checked onchange="updateSettings()"> Ask for confirmation before taking an action.</label>
+      <label class="check"><input id="slow" type="checkbox" checked onchange="updateSettings()"> Use a slower, simpler prompt.</label>
+    </div>
+
+    <div class="section">
+      <b>Speech flexibility</b>
+      <p class="note">In a future full system, this layer would use an individualized speech model to better handle pauses, atypical pronunciation, repetitions, or broken speech.</p>
+      <div class="preset">
+        <button class="secondary" onclick="setSpeech('Patient mode')">Patient mode</button>
+        <button class="secondary" onclick="setSpeech('Standard mode')">Standard mode</button>
+      </div>
+      <div id="speechMode" class="status">Patient mode enabled</div>
+    </div>
+
+    <div class="section">
+      <b>Core proposed solution</b>
+      <ul class="note">
+        <li><b>1. Speech adaptation:</b> designed for broken, interrupted, hesitant, or atypical speech.</li>
+        <li><b>2. Current input:</b> shows exactly what PaceVoice thinks the user said.</li>
+        <li><b>3. Conversation history:</b> keeps previous conversations available to read and review.</li>
+        <li><b>4. User-controlled pace:</b> gives the user more time instead of forcing a fast response.</li>
+        <li><b>5. Multimodal support:</b> combines voice, text, repetition, and confirmation.</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+</div>
+<div id="toast" class="toast"></div>
+
+<script>
+let lastAssistant = "";
+let listening = false;
+let timer = null;
+let recognition = null;
+let conversations = [
+  {id:1, title:"Welcome", preview:"Getting started with PaceVoice.", messages:[]}
+];
+let currentConversation = conversations[0];
+
+const conv = document.getElementById("conversation");
+const historyList = document.getElementById("historyList");
+const statusEl = document.getElementById("status");
+const bar = document.getElementById("bar");
+const timeout = document.getElementById("timeout");
+
+function addMsg(role, text, meta="", heard=false){
+  const row=document.createElement("div"); row.className="msg "+role;
+  const wrap=document.createElement("div");
+  if(meta){const m=document.createElement("div");m.className="meta";m.textContent=meta;wrap.appendChild(m);}
+  const b=document.createElement("div");b.className="bubble"+(heard?" heard":"");b.textContent=text;
+  if(heard){
+    const label=document.createElement("div");label.className="heard-label";label.textContent="What I think you said";b.prepend(label);
+  }
+  wrap.appendChild(b);row.appendChild(wrap);conv.appendChild(row);conv.scrollTop=conv.scrollHeight;
+  currentConversation.messages.push({role,text,meta,heard});
+  if(currentConversation.messages.length===1) currentConversation.title=text.slice(0,24)+"…";
+  const userMsg=currentConversation.messages.find(m=>m.role==="user");
+  currentConversation.preview=userMsg?userMsg.text.slice(0,55):text.slice(0,55);
+  updateHistory();
+}
+function assistant(text){
+  addMsg("assistant",text,"PaceVoice");
+  lastAssistant=text;
+  if("speechSynthesis" in window){
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=document.getElementById("slow").checked?.78:1;
+    speechSynthesis.speak(u);
+  }
+}
+function updateSettings(){
+  document.getElementById("timeoutVal").textContent=timeout.value+" sec";
+  const r=document.getElementById("repeat").value;
+  document.getElementById("repeatVal").textContent=r+(r==="1"?" time":" times");
+  statusEl.textContent="Settings saved for this prototype.";
+}
+function setSpeech(mode){
+  document.getElementById("speechMode").textContent=mode==="Patient mode"?"Patient mode enabled":"Standard mode enabled";
+  statusEl.textContent=mode+" selected.";
+}
+function startWindow(){
+  clearInterval(timer);
+  let left=Number(timeout.value);
+  bar.style.width="100%";
+  timer=setInterval(()=>{
+    left-=.1; bar.style.width=Math.max(0,left/Number(timeout.value)*100)+"%";
+    if(left<=0){clearInterval(timer);statusEl.textContent="No problem—PaceVoice is still here. Press Repeat or try again when ready.";bar.style.width="100%";}
+  },100);
+}
+function respond(input){
+  const q=input.toLowerCase();
+  let answer;
+  if(q.includes("reminder")) answer="I heard: “Set a reminder to take my medication at 8 PM.” Would you like me to set that reminder?";
+  else if(q.includes("calendar")) answer="I heard: “Check my calendar tomorrow.” You have 2 events tomorrow. Would you like me to read them one at a time?";
+  else if(q.includes("light")) answer="I heard: “Turn on the kitchen lights.” Should I turn them on?";
+  else if(q.includes("weather")) answer="I heard: “Tell me the weather.” It will be partly cloudy today. Would you like more details?";
+  else answer="I heard: “"+input+".” I’m not sure what action you want yet. You can repeat it, change the response time, or type the command instead.";
+  assistant(answer);
+  statusEl.textContent="You have "+timeout.value+" seconds to respond. There is no need to rush.";
+  startWindow();
+}
+function sendText(){
+  const el=document.getElementById("textInput"); const v=el.value.trim(); if(!v)return;
+  addMsg("user",v,"You",true); el.value=""; respond(v);
+}
+function demo(v){document.getElementById("textInput").value=v;sendText();}
+function repeatLast(){
+  if(!lastAssistant){assistant("There is nothing to repeat yet.");return;}
+  let n=Number(document.getElementById("repeat").value);
+  if(n===0)n=1;
+  for(let i=0;i<n;i++) setTimeout(()=>assistant(lastAssistant),i*400);
+  statusEl.textContent="Repeating at your selected pace.";
+}
+function toggleMic(){
+  const btn=document.getElementById("mic");
+  if(!("webkitSpeechRecognition" in window || "SpeechRecognition" in window)){
+    statusEl.textContent="Live speech recognition is not available in this browser. Use the text box or a browser that supports speech recognition.";
+    return;
+  }
+  if(listening){recognition.stop();return;}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=new SR(); recognition.continuous=false; recognition.interimResults=true; recognition.lang="en-US";
+  listening=true;btn.classList.add("listening");btn.textContent="⏹ Stop listening";statusEl.textContent="Listening patiently—pauses are okay.";
+  recognition.onresult=e=>{
+    let final="";
+    for(let i=e.resultIndex;i<e.results.length;i++) final+=e.results[i][0].transcript;
+    document.getElementById("textInput").value=final;
+    if(e.results[e.results.length-1].isFinal){sendText();}
+  };
+  recognition.onerror=()=>{statusEl.textContent="I couldn't capture that. You can try again or type instead.";};
+  recognition.onend=()=>{listening=false;btn.classList.remove("listening");btn.textContent="🎙 Start voice input";};
+  recognition.start();
+}
+function updateHistory(){
+  historyList.innerHTML="";
+  conversations.forEach(c=>{
+    const btn=document.createElement("button");
+    btn.className="history-item";
+    btn.innerHTML="<b>"+c.title+"</b><small>"+(c.preview||"No messages yet")+"</small>";
+    btn.onclick=()=>loadConversation(c.id);
+    historyList.appendChild(btn);
+  });
+}
+function loadConversation(id){
+  const found=conversations.find(c=>c.id===id);
+  if(!found)return;
+  currentConversation=found;
+  conv.innerHTML="";
+  found.messages.forEach(m=>{
+    const row=document.createElement("div");row.className="msg "+m.role;
+    const wrap=document.createElement("div");
+    if(m.meta){const meta=document.createElement("div");meta.className="meta";meta.textContent=m.meta;wrap.appendChild(meta);}
+    const b=document.createElement("div");b.className="bubble"+(m.heard?" heard":"");b.textContent=m.text;
+    if(m.heard){const label=document.createElement("div");label.className="heard-label";label.textContent="What I think you said";b.prepend(label);}
+    wrap.appendChild(b);row.appendChild(wrap);conv.appendChild(row);
+  });
+  conv.scrollTop=conv.scrollHeight;
+  statusEl.textContent="Viewing previous conversation: "+found.title;
+}
+function newConversation(){
+  const id=Date.now();
+  const c={id,title:"Conversation "+(conversations.length),preview:"New conversation",messages:[]};
+  conversations.unshift(c);
+  currentConversation=c;
+  conv.innerHTML="";
+  addMsg("assistant","This is a new conversation. I’ll keep this exchange available in your conversation history so you can return to it later.","PaceVoice");
+  statusEl.textContent="New conversation started.";
+  updateHistory();
+}
+addMsg("assistant","Hi. I’m PaceVoice. I will show what I think you said, give you extra time, and let you ask me to repeat information. Try a command below.","PaceVoice");
+</script>
+</body>
+</html>
